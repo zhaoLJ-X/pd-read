@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAS 记忆系统设计 — 技术分析 · 规划设计 · 架构图</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --surface2: #1a1f2e;
+    --surface3: #202535;
+    --border: #2a3045;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --accent3: #0ea5e9;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --orange: #f97316;
+    --teal: #14b8a6;
+    --pink: #ec4899;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Pro Display', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #0d0f14 0%, #141a2e 50%, #0d0f14 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 40px 60px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(79,142,247,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: 200px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(79,142,247,0.1);
+    border: 1px solid rgba(79,142,247,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header p {
+    color: var(--text2);
+    font-size: 15px;
+    max-width: 600px;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+  }
+  .header-meta span {
+    color: var(--text3);
+    font-size: 12px;
+  }
+  .header-meta strong {
+    color: var(--text2);
+  }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 60px;
+  }
+
+  /* ── Section titles ── */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 24px;
+    margin-top: 48px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title:first-child { margin-top: 0; }
+  .section-num {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Cards ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: rgba(79,142,247,0.3); }
+  .card-accent {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .tag-hot { background: rgba(239,68,68,0.15); color: #f87171; }
+  .tag-stable { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .tag-emerging { background: rgba(79,142,247,0.15); color: #60a5fa; }
+  .tag-embedded { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+  .card p {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .card-props {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .prop-chip {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Score table ── */
+  .score-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .score-table th {
+    background: var(--surface2);
+    color: var(--text2);
+    font-weight: 600;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  .score-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(42,48,69,0.5);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .score-table tr:last-child td { border-bottom: none; }
+  .score-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .score-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .dot-green { background: var(--green); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-red { background: var(--red); }
+  .score-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bar-track {
+    width: 80px;
+    height: 6px;
+    background: var(--surface3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .rec-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .rec-yes { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+  .rec-maybe { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+  .rec-no { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+
+  /* ── Architecture Diagram ── */
+  .arch-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    overflow: auto;
+  }
+
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 900px;
+  }
+
+  /* Layer */
+  .layer {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    position: relative;
+  }
+  .layer-label {
+    width: 110px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  .layer-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Device row inside a layer */
+  .device-row {
+    display: flex;
+    gap: 12px;
+    padding: 16px 0;
+    align-items: flex-start;
+  }
+
+  /* Device box */
+  .device-box {
+    border-radius: 12px;
+    border: 1.5px solid;
+    padding: 14px 16px;
+    min-width: 160px;
+    position: relative;
+  }
+  .device-box.phone {
+    border-color: rgba(124,58,237,0.5);
+    background: rgba(124,58,237,0.06);
+  }
+  .device-box.box {
+    border-color: rgba(79,142,247,0.5);
+    background: rgba(79,142,247,0.06);
+    flex: 1;
+    max-width: 520px;
+  }
+  .device-box.cloud {
+    border-color: rgba(14,165,233,0.5);
+    background: rgba(14,165,233,0.06);
+    flex: 1;
+    max-width: 520px;
+  }
+  .device-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .device-icon {
+    font-size: 16px;
+  }
+  .device-box.phone .device-title { color: #a78bfa; }
+  .device-box.box .device-title { color: #60a5fa; }
+  .device-box.cloud .device-title { color: #38bdf8; }
+
+  .mem-modules {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mem-mod {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 7px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+  .mem-mod-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .mem-mod-name {
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .mem-mod-tech {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 1px;
+  }
+  .mem-mod-right {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+  }
+  .mem-size {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.05);
+    color: var(--text3);
+  }
+
+  /* Arrows between layers */
+  .layer-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0 0 110px;
+    height: 36px;
+    position: relative;
+  }
+  .arrow-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text3);
+    font-size: 11px;
+  }
+  .arrow-svg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0 12px;
+  }
+  .sync-label {
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2px 8px;
+  }
+
+  /* ── Memory Types Flow ── */
+  .memory-types-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .mt-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .mt-icon { font-size: 24px; margin-bottom: 8px; }
+  .mt-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .mt-desc { font-size: 11px; color: var(--text2); line-height: 1.5; margin-bottom: 10px; }
+  .mt-where { font-size: 10px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .loc-chip {
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .loc-phone { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .loc-box { background: rgba(79,142,247,0.15); color: #60a5fa; }
+  .loc-cloud { background: rgba(14,165,233,0.15); color: #38bdf8; }
+
+  /* ── Data Flow ── */
+  .flow-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    overflow: auto;
+  }
+  .flow-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text2);
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .flow-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 800px;
+    flex-wrap: nowrap;
+  }
+  .flow-step {
+    flex: 1;
+    text-align: center;
+    position: relative;
+  }
+  .flow-step-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 10px;
+    font-size: 12px;
+    color: var(--text);
+    margin: 0 4px;
+  }
+  .flow-step-box strong { display: block; font-size: 13px; margin-bottom: 4px; }
+  .flow-step-box .sub { font-size: 11px; color: var(--text3); }
+  .flow-arrow {
+    font-size: 20px;
+    color: var(--text3);
+    flex-shrink: 0;
+    padding: 0 4px;
+    margin-top: -8px;
+  }
+
+  /* ── Tech Selection ── */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .tech-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .tech-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .tech-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tech-stack-list {
+    list-style: none;
+  }
+  .tech-stack-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(42,48,69,0.4);
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .tech-stack-list li:last-child { border-bottom: none; }
+  .tech-item-name {
+    font-weight: 600;
+    color: var(--text);
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+
+  /* ── Conflict & Sync Design ── */
+  .sync-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .sync-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .sync-card h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sync-rule {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(42,48,69,0.4);
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .sync-rule:last-child { border-bottom: none; }
+  .rule-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Privacy Notice ── */
+  .privacy-banner {
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+  .privacy-icon { font-size: 24px; flex-shrink: 0; }
+  .privacy-content h3 { font-size: 14px; font-weight: 700; color: #f87171; margin-bottom: 8px; }
+  .privacy-rules { display: flex; flex-wrap: wrap; gap: 8px; }
+  .privacy-rule {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.15);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #fca5a5;
+  }
+
+  /* ── Roadmap ── */
+  .roadmap {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 24px;
+    position: relative;
+    padding-left: 24px;
+  }
+  .roadmap::before {
+    content: '';
+    position: absolute;
+    left: 5px; top: 16px; bottom: 16px;
+    width: 2px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent2) 100%);
+    border-radius: 1px;
+  }
+  .roadmap-item {
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+    position: relative;
+  }
+  .roadmap-dot {
+    position: absolute;
+    left: -21px;
+    top: 18px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    flex-shrink: 0;
+  }
+  .roadmap-item.phase2 .roadmap-dot { background: var(--accent2); }
+  .roadmap-item.phase3 .roadmap-dot { background: var(--teal); }
+  .roadmap-date {
+    width: 90px;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    padding-top: 2px;
+  }
+  .roadmap-item.phase2 .roadmap-date { color: var(--accent2); }
+  .roadmap-item.phase3 .roadmap-date { color: var(--teal); }
+  .roadmap-content h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .roadmap-content p { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .roadmap-tasks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .roadmap-task {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Risk table ── */
+  .risk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .risk-table th {
+    background: var(--surface2);
+    color: var(--text2);
+    font-weight: 600;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .risk-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(42,48,69,0.5);
+    color: var(--text);
+    vertical-align: top;
+  }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .risk-level {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .risk-high { background: rgba(239,68,68,0.12); color: #f87171; }
+  .risk-med { background: rgba(245,158,11,0.12); color: #fbbf24; }
+  .risk-low { background: rgba(34,197,94,0.12); color: #4ade80; }
+
+  /* ── Footnote ── */
+  .footnote {
+    text-align: center;
+    padding: 32px 0 16px;
+    color: var(--text3);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .container { padding: 20px 20px; }
+    .header { padding: 24px 20px; }
+    .header h1 { font-size: 22px; }
+    .memory-types-grid { grid-template-columns: repeat(2, 1fr); }
+    .tech-grid { grid-template-columns: 1fr; }
+    .sync-cards { grid-template-columns: 1fr; }
+    .cards-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-badge">🧠 PAS Memory Architecture</div>
+  <h1>记忆系统设计</h1>
+  <p>云 · 端 · 盒子侧 三层协同记忆架构 — 技术分析 · 规划设计 · 架构图</p>
+  <div class="header-meta">
+    <span>版本 <strong>v1.0</strong></span>
+    <span>日期 <strong>2026-03-30</strong></span>
+    <span>项目 <strong>PAIS-001 Personal AI Server</strong></span>
+    <span>状态 <strong style="color:#f59e0b">草案</strong></span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ── SECTION 1: 核心问题定义 ── -->
+  <div class="section-title">
+    <div class="section-num">1</div>
+    核心问题：为什么记忆系统如此关键？
+  </div>
+
+  <div class="cards-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #4f8ef7, #7c3aed);"></div>
+      <h3>🤯 上下文窗口有限</h3>
+      <p>LLM 每次对话只有有限的上下文窗口（4K~128K tokens），无法记住跨会话信息。<strong>记忆系统是 LLM 突破短期记忆限制的唯一解法。</strong></p>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #f97316, #ef4444);"></div>
+      <h3>🔒 隐私数据不出盒</h3>
+      <p>用户的个人记忆（日程、习惯、偏好、关系网络）是最隐私的数据。<strong>必须在本地盒子优先存储，云端只存加密摘要。</strong></p>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #14b8a6, #22c55e);"></div>
+      <h3>📱 多设备无缝接续</h3>
+      <p>用户在手机开始的对话，在盒子 Web 端继续，在 PC 上结束。<strong>三端记忆必须实时同步，做到「无缝接续」体验。</strong></p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: 记忆类型分类 ── -->
+  <div class="section-title">
+    <div class="section-num">2</div>
+    记忆类型：五种记忆的分类与定义
+  </div>
+
+  <div class="memory-types-grid">
+    <div class="mt-card">
+      <div class="mt-icon">💬</div>
+      <div class="mt-name">工作记忆</div>
+      <div class="mt-desc">当前对话的短期上下文，随会话生命周期存在</div>
+      <div class="mt-where">
+        <span class="loc-chip loc-phone">手机端</span>
+        <span class="loc-chip loc-box">盒子侧</span>
+      </div>
+    </div>
+    <div class="mt-card">
+      <div class="mt-icon">📖</div>
+      <div class="mt-name">情节记忆</div>
+      <div class="mt-desc">历史对话摘要，「上次你说到…」类型检索</div>
+      <div class="mt-where">
+        <span class="loc-chip loc-box">盒子侧</span>
+        <span class="loc-chip loc-cloud">云端</span>
+      </div>
+    </div>
+    <div class="mt-card">
+      <div class="mt-icon">🧩</div>
+      <div class="mt-name">语义记忆</div>
+      <div class="mt-desc">关于用户的事实性知识：偏好、习惯、技能</div>
+      <div class="mt-where">
+        <span class="loc-chip loc-box">盒子侧</span>
+        <span class="loc-chip loc-cloud">云端</span>
+      </div>
+    </div>
+    <div class="mt-card">
+      <div class="mt-icon">📋</div>
+      <div class="mt-name">程序记忆</div>
+      <div class="mt-desc">用户的工作流程、常用指令、自动化规则</div>
+      <div class="mt-where">
+        <span class="loc-chip loc-box">盒子侧</span>
+      </div>
+    </div>
+    <div class="mt-card">
+      <div class="mt-icon">🌐</div>
+      <div class="mt-name">世界知识</div>
+      <div class="mt-desc">通用知识库、RAG 文档、企业知识库</div>
+      <div class="mt-where">
+        <span class="loc-chip loc-box">盒子侧</span>
+        <span class="loc-chip loc-cloud">云端</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: 现有技术分析 ── -->
+  <div class="section-title">
+    <div class="section-num">3</div>
+    现有技术分析：各存储技术的适用性评估
+  </div>
+
+  <div class="cards-grid">
+    <!-- Vector DB -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #4f8ef7, #0ea5e9);"></div>
+      <h3>🔍 向量数据库 <span class="card-tag tag-hot">主流方案</span></h3>
+      <p>将文本转为嵌入向量存储，支持语义相似度检索。是目前 RAG 架构的标准组件，成熟度高。</p>
+      <div class="card-props">
+        <span class="prop-chip">语义检索 ✅</span>
+        <span class="prop-chip">近似匹配 ✅</span>
+        <span class="prop-chip">精确查询 ❌</span>
+        <span class="prop-chip">关系推理 ❌</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">ChromaDB</strong>（本地嵌入）·
+        <strong style="color:var(--text2)">Qdrant</strong>（高性能）·
+        <strong style="color:var(--text2)">Milvus</strong>（企业级）
+      </div>
+    </div>
+
+    <!-- Graph DB -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #7c3aed, #ec4899);"></div>
+      <h3>🕸️ 图数据库 <span class="card-tag tag-emerging">新兴方向</span></h3>
+      <p>以图结构建模实体关系，适合人物关系网络、知识图谱。GraphRAG 是目前最热的研究方向之一。</p>
+      <div class="card-props">
+        <span class="prop-chip">关系推理 ✅</span>
+        <span class="prop-chip">路径查询 ✅</span>
+        <span class="prop-chip">语义检索 ⚠️</span>
+        <span class="prop-chip">嵌入成本高 ⚠️</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">Neo4j</strong>（经典）·
+        <strong style="color:var(--text2)">Kuzu</strong>（嵌入式）·
+        <strong style="color:var(--text2)">FalkorDB</strong>（Redis协议）
+      </div>
+    </div>
+
+    <!-- KV Store -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #22c55e, #14b8a6);"></div>
+      <h3>🗝️ KV + 关系数据库 <span class="card-tag tag-stable">基础底座</span></h3>
+      <p>KV 存储用户偏好配置（毫秒级读取），关系型 DB 存对话历史结构化数据，形成精确查询底座。</p>
+      <div class="card-props">
+        <span class="prop-chip">精确查询 ✅</span>
+        <span class="prop-chip">事务保障 ✅</span>
+        <span class="prop-chip">语义检索 ❌</span>
+        <span class="prop-chip">关系推理 ⚠️</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">Redis</strong>（KV缓存）·
+        <strong style="color:var(--text2)">SQLite</strong>（端侧轻量）·
+        <strong style="color:var(--text2)">PostgreSQL</strong>（服务侧）
+      </div>
+    </div>
+
+    <!-- Memory Framework -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #f59e0b, #f97316);"></div>
+      <h3>🧠 记忆框架 <span class="card-tag tag-hot">直接可用</span></h3>
+      <p>专为 AI 记忆设计的框架层，抽象了存储细节，提供记忆提取、更新、遗忘等 AI-native 接口。</p>
+      <div class="card-props">
+        <span class="prop-chip">开箱即用 ✅</span>
+        <span class="prop-chip">AI原生 ✅</span>
+        <span class="prop-chip">可定制 ⚠️</span>
+        <span class="prop-chip">私有部署 ✅</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">Mem0</strong>（★强烈推荐）·
+        <strong style="color:var(--text2)">Zep</strong>（对话记忆）·
+        <strong style="color:var(--text2)">Memoripy</strong>（轻量）
+      </div>
+    </div>
+
+    <!-- Full-text Search -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #0ea5e9, #22c55e);"></div>
+      <h3>📑 全文检索引擎 <span class="card-tag tag-stable">辅助组件</span></h3>
+      <p>关键词精确检索，与向量检索互补形成混合检索（Hybrid Search），提升召回率和准确率。</p>
+      <div class="card-props">
+        <span class="prop-chip">关键词检索 ✅</span>
+        <span class="prop-chip">BM25 ✅</span>
+        <span class="prop-chip">语义检索 ❌</span>
+        <span class="prop-chip">轻量嵌入 ✅</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">Elasticsearch</strong>·
+        <strong style="color:var(--text2)">MeiliSearch</strong>（Rust轻量）·
+        <strong style="color:var(--text2)">Tantivy</strong>（嵌入式）
+      </div>
+    </div>
+
+    <!-- Object Storage -->
+    <div class="card">
+      <div class="card-accent" style="background: linear-gradient(90deg, #ec4899, #7c3aed);"></div>
+      <h3>📦 对象存储 <span class="card-tag tag-embedded">盒子专属</span></h3>
+      <p>存储多模态记忆：图片、音频、视频片段。盒子侧用 MinIO，云端用 S3/COS，统一接口访问。</p>
+      <div class="card-props">
+        <span class="prop-chip">多模态 ✅</span>
+        <span class="prop-chip">大文件 ✅</span>
+        <span class="prop-chip">语义检索 ❌</span>
+        <span class="prop-chip">S3兼容 ✅</span>
+      </div>
+      <div style="margin-top:12px; font-size:11px; color:var(--text3)">
+        代表：<strong style="color:var(--text2)">MinIO</strong>（本地）·
+        <strong style="color:var(--text2)">腾讯COS</strong>（云端）·
+        <strong style="color:var(--text2)">Cloudflare R2</strong>（无流量费）
+      </div>
+    </div>
+  </div>
+
+  <!-- 技术对比评分表 -->
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:24px;">
+    <div style="padding:14px 20px; background:var(--surface2); border-bottom:1px solid var(--border); font-size:13px; font-weight:700; color:var(--text2);">
+      📊 技术方案综合评分（按 PAS 需求场景）
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="score-table">
+      <thead>
+        <tr>
+          <th>技术方案</th>
+          <th>语义检索</th>
+          <th>关系推理</th>
+          <th>端侧友好</th>
+          <th>隐私安全</th>
+          <th>实现难度</th>
+          <th>PAS 推荐</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>向量库 (ChromaDB)</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:90%;background:#4f8ef7"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:20%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">2/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:85%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:90%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:80%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">易</span></div></td>
+          <td><span class="rec-badge rec-yes">✅ 核心组件</span></td>
+        </tr>
+        <tr>
+          <td><strong>Mem0 框架</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:85%;background:#4f8ef7"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:70%;background:#4f8ef7"></div></div><span style="font-size:11px;color:var(--text2)">7/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:75%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">7/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:80%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:90%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">极易</span></div></td>
+          <td><span class="rec-badge rec-yes">✅ 强烈推荐</span></td>
+        </tr>
+        <tr>
+          <td><strong>图数据库 (Kuzu)</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:50%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">5/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:95%;background:#4f8ef7"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:70%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">7/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:85%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:45%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">难</span></div></td>
+          <td><span class="rec-badge rec-maybe">⚠️ v2.0引入</span></td>
+        </tr>
+        <tr>
+          <td><strong>SQLite / PostgreSQL</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:10%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">1/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:60%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">6/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:95%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:95%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:95%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">极易</span></div></td>
+          <td><span class="rec-badge rec-yes">✅ 基础底座</span></td>
+        </tr>
+        <tr>
+          <td><strong>Redis</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:30%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">3/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:10%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">1/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:80%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:90%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:95%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">极易</span></div></td>
+          <td><span class="rec-badge rec-yes">✅ 会话缓存</span></td>
+        </tr>
+        <tr>
+          <td><strong>MeiliSearch</strong></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:40%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">4/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:10%;background:#ef4444"></div></div><span style="font-size:11px;color:var(--text2)">1/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:85%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">8/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:90%;background:#22c55e"></div></div><span style="font-size:11px;color:var(--text2)">9/10</span></div></td>
+          <td><div class="score-bar"><div class="bar-track"><div class="bar-fill" style="width:85%;background:#f59e0b"></div></div><span style="font-size:11px;color:var(--text2)">易</span></div></td>
+          <td><span class="rec-badge rec-maybe">⚠️ 混合检索补充</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: 三层架构设计 ── -->
+  <div class="section-title">
+    <div class="section-num">4</div>
+    核心架构：三层记忆协同设计
+  </div>
+
+  <div class="arch-wrapper">
+    <div class="arch-diagram">
+
+      <!-- ─ 手机端 ─ -->
+      <div class="layer">
+        <div class="layer-label" style="color:#a78bfa;">手机端</div>
+        <div class="layer-body">
+          <div class="device-row">
+            <div class="device-box phone" style="flex:1;">
+              <div class="device-title"><span class="device-icon">📱</span> Mobile App (iOS / Android)</div>
+              <div class="mem-modules">
+                <div class="mem-mod">
+                  <span class="mem-mod-icon">💬</span>
+                  <div>
+                    <div class="mem-mod-name">会话缓存</div>
+                    <div class="mem-mod-tech">SQLite (on-device) — 最近 50 条对话</div>
+                  </div>
+                  <div class="mem-mod-right"><span class="mem-size">≤ 10MB</span></div>
+                </div>
+                <div class="mem-mod">
+                  <span class="mem-mod-icon">⚡</span>
+                  <div>
+                    <div class="mem-mod-name">快速上下文注入</div>
+                    <div class="mem-mod-tech">从盒子拉取摘要 → 插入系统 Prompt</div>
+                  </div>
+                  <div class="mem-mod-right"><span class="mem-size">实时</span></div>
+                </div>
+                <div class="mem-mod">
+                  <span class="mem-mod-icon">🔑</span>
+                  <div>
+                    <div class="mem-mod-name">用户偏好快照</div>
+                    <div class="mem-mod-tech">KeyChain / SharedPrefs — 语言、主题、常用指令</div>
+                  </div>
+                  <div class="mem-mod-right"><span class="mem-size">≤ 1MB</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="device-box phone" style="flex:0.8;">
+              <div class="device-title"><span class="device-icon">💻</span> Web UI (浏览器)</div>
+              <div class="mem-modules">
+                <div class="mem-mod">
+                  <span class="mem-mod-icon">🗂️</span>
+                  <div>
+                    <div class="mem-mod-name">IndexedDB 本地缓存</div>
+                    <div class="mem-mod-tech">会话历史 + 草稿</div>
+                  </div>
+                </div>
+                <div class="mem-mod">
+                  <span class="mem-mod-icon">🔄</span>
+                  <div>
+                    <div class="mem-mod-name">WebSocket 实时同步</div>
+                    <div class="mem-mod-tech">与盒子侧建立长连接</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─ 箭头1 ─ -->
+      <div class="layer-arrow">
+        <div class="arrow-line">
+          <span>↕️</span>
+          <span class="sync-label">LAN/WAN · WebSocket + REST · 端到端加密 · 增量同步</span>
+          <span>↕️</span>
+        </div>
+      </div>
+
+      <!-- ─ 盒子侧 ─ -->
+      <div class="layer">
+        <div class="layer-label" style="color:#60a5fa;">盒子侧</div>
+        <div class="layer-body">
+          <div class="device-row">
+            <div class="device-box box">
+              <div class="device-title"><span class="device-icon">📦</span> PAIS Box (RK3588 本地运行)</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 0;">🟦 记忆核心层</div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🧠</span>
+                    <div>
+                      <div class="mem-mod-name">Mem0 记忆引擎</div>
+                      <div class="mem-mod-tech">统一记忆读写 API / 自动遗忘机制</div>
+                    </div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🔍</span>
+                    <div>
+                      <div class="mem-mod-name">ChromaDB 向量库</div>
+                      <div class="mem-mod-tech">语义检索 / 情节 & 语义记忆</div>
+                    </div>
+                    <div class="mem-mod-right"><span class="mem-size">~2GB</span></div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🗃️</span>
+                    <div>
+                      <div class="mem-mod-name">PostgreSQL</div>
+                      <div class="mem-mod-tech">对话历史 / 元数据 / 结构化事实</div>
+                    </div>
+                    <div class="mem-mod-right"><span class="mem-size">~10GB</span></div>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 0;">🟩 检索增强层</div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🔑</span>
+                    <div>
+                      <div class="mem-mod-name">Redis</div>
+                      <div class="mem-mod-tech">活跃会话 KV 缓存 / 热点记忆</div>
+                    </div>
+                    <div class="mem-mod-right"><span class="mem-size">512MB</span></div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">📑</span>
+                    <div>
+                      <div class="mem-mod-name">MeiliSearch（可选）</div>
+                      <div class="mem-mod-tech">关键词混合检索补充</div>
+                    </div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">📦</span>
+                    <div>
+                      <div class="mem-mod-name">MinIO 对象存储</div>
+                      <div class="mem-mod-tech">多模态记忆：图片 / 音频 / 文档</div>
+                    </div>
+                    <div class="mem-mod-right"><span class="mem-size">灵活</span></div>
+                  </div>
+                </div>
+
+              </div>
+              <!-- 记忆处理流程 -->
+              <div style="margin-top:12px; padding:10px; background:rgba(79,142,247,0.05); border-radius:8px; border:1px solid rgba(79,142,247,0.15);">
+                <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:6px;">⚙️ 记忆处理管线 (Box-side)</div>
+                <div style="display:flex; gap:6px; align-items:center; font-size:11px; color:var(--text3); flex-wrap:wrap;">
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">输入消息</span>
+                  <span>→</span>
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">重要性评分</span>
+                  <span>→</span>
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">实体抽取</span>
+                  <span>→</span>
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">向量化 Embedding</span>
+                  <span>→</span>
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">写入 ChromaDB + PG</span>
+                  <span>→</span>
+                  <span style="background:var(--surface2);padding:3px 8px;border-radius:5px;color:var(--text2)">加密摘要 → 云端</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─ 箭头2 ─ -->
+      <div class="layer-arrow">
+        <div class="arrow-line">
+          <span>↕️</span>
+          <span class="sync-label">HTTPS · AES-256 加密 · 异步批量同步 · 仅上传加密摘要（原文不出盒）</span>
+          <span>↕️</span>
+        </div>
+      </div>
+
+      <!-- ─ 云端 ─ -->
+      <div class="layer">
+        <div class="layer-label" style="color:#38bdf8;">云端</div>
+        <div class="layer-body">
+          <div class="device-row">
+            <div class="device-box cloud" style="flex:1;">
+              <div class="device-title"><span class="device-icon">☁️</span> Cloud Services (腾讯云 / 自托管)</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 0;">🔵 记忆摘要库</div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🌐</span>
+                    <div>
+                      <div class="mem-mod-name">Qdrant Cloud</div>
+                      <div class="mem-mod-tech">加密记忆摘要向量索引</div>
+                    </div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🗄️</span>
+                    <div>
+                      <div class="mem-mod-name">Cloud PostgreSQL</div>
+                      <div class="mem-mod-tech">跨设备元数据同步</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 0;">🟡 用户身份层</div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">👤</span>
+                    <div>
+                      <div class="mem-mod-name">账号 + 设备绑定</div>
+                      <div class="mem-mod-tech">多盒子 / 多手机关联</div>
+                    </div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🔐</span>
+                    <div>
+                      <div class="mem-mod-name">密钥管理 KMS</div>
+                      <div class="mem-mod-tech">用户持有加密密钥</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:4px 0;">🟠 知识增强层</div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🤖</span>
+                    <div>
+                      <div class="mem-mod-name">云端 LLM 提炼</div>
+                      <div class="mem-mod-tech">对摘要进行再提炼压缩</div>
+                    </div>
+                  </div>
+                  <div class="mem-mod">
+                    <span class="mem-mod-icon">🌍</span>
+                    <div>
+                      <div class="mem-mod-name">公共知识库</div>
+                      <div class="mem-mod-tech">维基 / 专业领域 RAG</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── SECTION 5: 记忆检索流程 ── -->
+  <div class="section-title">
+    <div class="section-num">5</div>
+    检索流程：一次对话请求的记忆召回链路
+  </div>
+
+  <div class="flow-wrapper">
+    <div class="flow-title">Memory Retrieval Pipeline</div>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-box">
+          <strong>① 用户输入</strong>
+          <div class="sub">手机 / Web<br>自然语言查询</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.05);">
+          <strong>② 意图解析</strong>
+          <div class="sub">Query Routing<br>判断是否需要记忆</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.05);">
+          <strong>③ Redis 热缓存</strong>
+          <div class="sub">活跃会话<br>毫秒级返回</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.05);">
+          <strong>④ ChromaDB 检索</strong>
+          <div class="sub">语义相似度<br>Top-K 召回</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.05);">
+          <strong>⑤ PG 精确查询</strong>
+          <div class="sub">结构化事实<br>补充语义结果</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(124,58,237,0.3);background:rgba(124,58,237,0.05);">
+          <strong>⑥ 记忆融合</strong>
+          <div class="sub">Rerank 重排序<br>构建记忆 Prompt</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.05);">
+          <strong>⑦ 注入 LLM</strong>
+          <div class="sub">System Prompt<br>增强推理</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 记忆写入流程 -->
+  <div class="flow-wrapper">
+    <div class="flow-title">Memory Write Pipeline（对话结束后异步执行）</div>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-box">
+          <strong>① 对话结束</strong>
+          <div class="sub">触发异步任务</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.05);">
+          <strong>② 重要性评分</strong>
+          <div class="sub">LLM 判断值得<br>长期记忆的内容</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.05);">
+          <strong>③ 实体抽取</strong>
+          <div class="sub">NER：人名、地点<br>时间、事件</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.05);">
+          <strong>④ Embedding</strong>
+          <div class="sub">本地 Embedding 模型<br>（bge-m3 / nomic）</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.05);">
+          <strong>⑤ 冲突检测</strong>
+          <div class="sub">与现有记忆比对<br>更新 or 追加</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(124,58,237,0.3);background:rgba(124,58,237,0.05);">
+          <strong>⑥ 本地写入</strong>
+          <div class="sub">ChromaDB + PG<br>（盒子侧落盘）</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-box" style="border-color:rgba(14,165,233,0.3);background:rgba(14,165,233,0.05);">
+          <strong>⑦ 加密同步</strong>
+          <div class="sub">摘要加密上云<br>（原文永不出盒）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 6: 技术选型落地 ── -->
+  <div class="section-title">
+    <div class="section-num">6</div>
+    技术选型落地：各层推荐组合
+  </div>
+
+  <div class="tech-grid">
+    <div class="tech-card">
+      <div class="tech-card-header">
+        <div class="tech-card-title">📱 手机端 (端侧)</div>
+        <span class="rec-badge rec-yes">轻量优先</span>
+      </div>
+      <ul class="tech-stack-list">
+        <li>
+          <span class="tech-item-name">SQLite</span>
+          <span>本地会话缓存，最近 50 条；无需网络依赖</span>
+        </li>
+        <li>
+          <span class="tech-item-name">KeyChain/SecureStorage</span>
+          <span>用户偏好、Token、设备密钥安全存储</span>
+        </li>
+        <li>
+          <span class="tech-item-name">IndexedDB</span>
+          <span>Web 端会话草稿 & 离线缓存</span>
+        </li>
+        <li>
+          <span class="tech-item-name">内存 Context Window</span>
+          <span>当前会话 Working Memory，随进程生命周期</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="tech-card">
+      <div class="tech-card-header">
+        <div class="tech-card-title">📦 盒子侧 (核心)</div>
+        <span class="rec-badge rec-yes">全量存储</span>
+      </div>
+      <ul class="tech-stack-list">
+        <li>
+          <span class="tech-item-name">Mem0 (self-hosted)</span>
+          <span>记忆框架核心，统一 API，内置遗忘曲线</span>
+        </li>
+        <li>
+          <span class="tech-item-name">ChromaDB</span>
+          <span>本地向量存储，bge-m3 嵌入，语义检索</span>
+        </li>
+        <li>
+          <span class="tech-item-name">PostgreSQL</span>
+          <span>对话历史、实体关系表、结构化元数据</span>
+        </li>
+        <li>
+          <span class="tech-item-name">Redis</span>
+          <span>活跃会话缓存、热点记忆、Session KV</span>
+        </li>
+        <li>
+          <span class="tech-item-name">MinIO</span>
+          <span>图片、音频、文档对象存储（S3兼容接口）</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="tech-card">
+      <div class="tech-card-header">
+        <div class="tech-card-title">☁️ 云端 (协同)</div>
+        <span class="rec-badge rec-maybe">摘要备份</span>
+      </div>
+      <ul class="tech-stack-list">
+        <li>
+          <span class="tech-item-name">Qdrant Cloud</span>
+          <span>加密摘要向量存储，跨盒子记忆同步</span>
+        </li>
+        <li>
+          <span class="tech-item-name">Cloud PG (CDB)</span>
+          <span>用户账号、设备管理、跨设备元数据</span>
+        </li>
+        <li>
+          <span class="tech-item-name">腾讯 COS / R2</span>
+          <span>加密多媒体备份（可选，用户自主控制）</span>
+        </li>
+        <li>
+          <span class="tech-item-name">KMS (密钥管理)</span>
+          <span>用户持有加密密钥，厂商无法解密原文</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── SECTION 7: 同步与冲突处理 ── -->
+  <div class="section-title">
+    <div class="section-num">7</div>
+    同步策略与冲突解决
+  </div>
+
+  <div class="sync-cards">
+    <div class="sync-card">
+      <h3>🔄 同步策略设计</h3>
+      <div class="sync-rule">
+        <span class="rule-icon">⚡</span>
+        <div><strong>实时同步（&lt;100ms）：</strong>活跃会话的 Working Memory，通过 WebSocket 在盒子和手机间实时同步，用户感知无缝</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">⏱️</span>
+        <div><strong>批量同步（每 5 分钟）：</strong>新产生的记忆向量和结构化事实，从手机增量推送至盒子，盒子处理后写入存储</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">🌙</span>
+        <div><strong>夜间同步（每天 02:00）：</strong>盒子侧将加密记忆摘要异步上传至云端，用于多盒子备份和异地恢复</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">📴</span>
+        <div><strong>离线降级：</strong>盒子不可达时，手机使用本地 SQLite 缓存运行，重连后自动增量合并，不丢失数据</div>
+      </div>
+    </div>
+
+    <div class="sync-card">
+      <h3>⚠️ 冲突解决规则</h3>
+      <div class="sync-rule">
+        <span class="rule-icon">🏆</span>
+        <div><strong>盒子侧优先（Source of Truth）：</strong>盒子是主记忆节点，所有设备以盒子版本为权威，手机数据视为「待同步」状态</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">🕐</span>
+        <div><strong>时间戳 + Vector Clock：</strong>每条记忆携带逻辑时钟，同内容不同版本取最新时间戳，并保留旧版本快照供回溯</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">🔀</span>
+        <div><strong>语义冲突检测：</strong>Mem0 检测到同一实体两条矛盾记忆时（如「用户喜欢咖啡」vs「用户不喝咖啡」），保留最新记录并标注「已更新」</div>
+      </div>
+      <div class="sync-rule">
+        <span class="rule-icon">🗑️</span>
+        <div><strong>遗忘曲线：</strong>低重要性记忆按 Ebbinghaus 遗忘曲线降权，90天未访问的记忆自动归档压缩至冷存储</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 8: 隐私设计 ── -->
+  <div class="section-title">
+    <div class="section-num">8</div>
+    隐私安全设计：数据主权在用户手中
+  </div>
+
+  <div class="privacy-banner">
+    <div class="privacy-icon">🔐</div>
+    <div class="privacy-content">
+      <h3>隐私原则：原始记忆永不离开盒子</h3>
+      <div class="privacy-rules">
+        <span class="privacy-rule">盒子本地存储全量原文</span>
+        <span class="privacy-rule">云端只存 AES-256 加密摘要</span>
+        <span class="privacy-rule">用户持有加密密钥（厂商无法解密）</span>
+        <span class="privacy-rule">支持完全断网私有化部署</span>
+        <span class="privacy-rule">用户可一键抹除所有记忆</span>
+        <span class="privacy-rule">记忆访问日志可审计</span>
+        <span class="privacy-rule">传输层 TLS 1.3 全程加密</span>
+        <span class="privacy-rule">支持导出 JSON 数据迁移</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom:8px;">
+    <div class="card">
+      <div class="card-accent" style="background:#4f8ef7;"></div>
+      <h3>🔑 用户密钥控制</h3>
+      <p style="font-size:12px;">用户注册时生成唯一加密密钥对，存储在盒子 TEE 或手机 Secure Enclave，厂商服务器零知识。</p>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background:#22c55e;"></div>
+      <h3>👁️ 记忆可见性控制</h3>
+      <p style="font-size:12px;">用户可以为每条记忆设置私密/共享/公开等级，共享记忆可选择性开放给家庭成员设备。</p>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background:#f59e0b;"></div>
+      <h3>🚫 记忆删除权</h3>
+      <p style="font-size:12px;">支持删除单条记忆、删除某时间段记忆、「忘记我说的一切」全量删除，并级联清除云端备份。</p>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background:#ec4899;"></div>
+      <h3>📊 访问审计日志</h3>
+      <p style="font-size:12px;">所有记忆读写操作记录访问日志，用户可在 Web UI 查看「谁在什么时候读取了什么记忆」。</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 9: 开发路线图 ── -->
+  <div class="section-title">
+    <div class="section-num">9</div>
+    开发路线图：分阶段落地
+  </div>
+
+  <div class="roadmap">
+    <div class="roadmap-item">
+      <div class="roadmap-dot"></div>
+      <div class="roadmap-date">4月 7日<br>Sprint 1</div>
+      <div class="roadmap-content">
+        <h4>Phase 1 — 基础记忆底座</h4>
+        <p>在 Docker Compose 中搭建 PostgreSQL + Redis + ChromaDB，集成 Mem0 框架，实现基本对话记忆存储与检索。</p>
+        <div class="roadmap-tasks">
+          <span class="roadmap-task">PostgreSQL 对话历史表</span>
+          <span class="roadmap-task">ChromaDB 向量写入</span>
+          <span class="roadmap-task">Mem0 SDK 接入</span>
+          <span class="roadmap-task">Redis 会话缓存</span>
+          <span class="roadmap-task">基础记忆 API (/memory/add, /memory/search)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-item phase2">
+      <div class="roadmap-dot"></div>
+      <div class="roadmap-date">4月 21日<br>Sprint 2</div>
+      <div class="roadmap-content">
+        <h4>Phase 2 — 智能记忆增强</h4>
+        <p>加入重要性评分、实体抽取、遗忘曲线、冲突检测，记忆质量从「存储」升级为「智能」。</p>
+        <div class="roadmap-tasks">
+          <span class="roadmap-task">重要性评分模型（本地 LLM）</span>
+          <span class="roadmap-task">NER 实体抽取</span>
+          <span class="roadmap-task">记忆冲突检测</span>
+          <span class="roadmap-task">遗忘曲线降权</span>
+          <span class="roadmap-task">记忆管理 Web UI</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-item">
+      <div class="roadmap-dot"></div>
+      <div class="roadmap-date">5月 9日<br>软件 Demo</div>
+      <div class="roadmap-content">
+        <h4>Phase 3 — 多端同步（软件 Demo 目标）</h4>
+        <p>实现手机 App 与盒子的 WebSocket 实时同步，支持离线降级、增量合并，让用户感受到「记住你」的魔法。</p>
+        <div class="roadmap-tasks">
+          <span class="roadmap-task">WebSocket 实时同步协议</span>
+          <span class="roadmap-task">手机端 SQLite 离线缓存</span>
+          <span class="roadmap-task">增量冲突合并</span>
+          <span class="roadmap-task">记忆上下文注入 Prompt</span>
+          <span class="roadmap-task">Demo 可演示记忆能力</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-item phase2">
+      <div class="roadmap-dot"></div>
+      <div class="roadmap-date">6月 27日<br>硬件 Demo</div>
+      <div class="roadmap-content">
+        <h4>Phase 4 — 盒子端优化 + 加密云同步</h4>
+        <p>针对 RK3588 硬件优化 Embedding 性能（NPU 加速），加入端到端加密云同步，完善隐私设计。</p>
+        <div class="roadmap-tasks">
+          <span class="roadmap-task">NPU 加速 Embedding（bge-m3）</span>
+          <span class="roadmap-task">AES-256 加密记忆摘要</span>
+          <span class="roadmap-task">云端 Qdrant 同步</span>
+          <span class="roadmap-task">KMS 密钥管理</span>
+          <span class="roadmap-task">记忆删除 & 导出</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-item phase3">
+      <div class="roadmap-dot"></div>
+      <div class="roadmap-date">8月 31日<br>DVT</div>
+      <div class="roadmap-content">
+        <h4>Phase 5 — 图谱记忆 + 多模态（v2.0）</h4>
+        <p>引入图数据库（Kuzu）构建个人知识图谱，支持图片/语音多模态记忆，为发布版本做好准备。</p>
+        <div class="roadmap-tasks">
+          <span class="roadmap-task">Kuzu 图数据库集成</span>
+          <span class="roadmap-task">个人知识图谱构建</span>
+          <span class="roadmap-task">图片记忆（MinIO + CLIP）</span>
+          <span class="roadmap-task">GraphRAG 检索</span>
+          <span class="roadmap-task">家庭共享记忆空间</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 10: 风险评估 ── -->
+  <div class="section-title">
+    <div class="section-num">10</div>
+    风险评估与应对
+  </div>
+
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:24px;">
+    <div style="overflow-x:auto;">
+    <table class="risk-table">
+      <thead>
+        <tr>
+          <th>风险项</th>
+          <th>等级</th>
+          <th>影响</th>
+          <th>应对措施</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>RK3588 Embedding 速度慢</strong><br><span style="font-size:11px;color:var(--text3)">NPU 利用率不足，延迟影响体验</span></td>
+          <td><span class="risk-level risk-high">高</span></td>
+          <td style="font-size:12px">记忆写入延迟 &gt;1s，影响实时感</td>
+          <td style="font-size:12px">①异步写入不阻塞对话 ②bge-small 替代 ③NPU RKNN 加速</td>
+        </tr>
+        <tr>
+          <td><strong>记忆幻觉（Memory Hallucination）</strong><br><span style="font-size:11px;color:var(--text3)">LLM 错误提取或过度解读记忆</span></td>
+          <td><span class="risk-level risk-high">高</span></td>
+          <td style="font-size:12px">用户体验严重损害，记错信息</td>
+          <td style="font-size:12px">①记忆置信度评分 ②用户可纠错 ③定期人工确认重要记忆</td>
+        </tr>
+        <tr>
+          <td><strong>盒子离线时记忆分裂</strong><br><span style="font-size:11px;color:var(--text3)">手机离线产生的记忆与盒子冲突</span></td>
+          <td><span class="risk-level risk-med">中</span></td>
+          <td style="font-size:12px">重连后合并逻辑复杂，可能丢失</td>
+          <td style="font-size:12px">① Vector Clock 逻辑时钟 ②记忆追加而非覆盖 ③冲突标记等用户解决</td>
+        </tr>
+        <tr>
+          <td><strong>隐私数据泄露</strong><br><span style="font-size:11px;color:var(--text3)">加密实现漏洞或密钥管理问题</span></td>
+          <td><span class="risk-level risk-med">中</span></td>
+          <td style="font-size:12px">用户信任崩盘，品牌危机</td>
+          <td style="font-size:12px">①加密摘要不含原文 ②用户持密钥 ③第三方安全审计（上市前）</td>
+        </tr>
+        <tr>
+          <td><strong>存储膨胀（记忆无限增长）</strong><br><span style="font-size:11px;color:var(--text3)">长期使用后盒子硬盘被记忆占满</span></td>
+          <td><span class="risk-level risk-low">低</span></td>
+          <td style="font-size:12px">盒子存储耗尽，性能下降</td>
+          <td style="font-size:12px">①遗忘曲线降权归档 ②冷存储分层 ③存储配额告警</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- footnote -->
+  <div class="footnote">
+    PAIS-001 Memory System Design v1.0 · 2026-03-30 · 草案阶段，随技术验证持续迭代
+  </div>
+
+</div>
+</body>
+</html>

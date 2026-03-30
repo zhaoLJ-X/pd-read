@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAS 记忆系统设计 v2 — OpenClaw + MemOS 协同架构</title>
+<style>
+  :root {
+    --bg: #0c0e13;
+    --surface: #131620;
+    --surface2: #191d2c;
+    --surface3: #1f2436;
+    --border: #272d42;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --teal: #14b8a6;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --orange: #f97316;
+    --red: #ef4444;
+    --pink: #ec4899;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #4b5572;
+    --lobster: #f97316;
+    --memos: #7c3aed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Pro Display', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #0c0e13 0%, #131a2e 60%, #0c0e13 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 44px 64px 36px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -100px; right: -60px;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(249,115,22,0.09) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -80px; left: 30%;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(124,58,237,0.07) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .badge-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .badge-lobster {
+    background: rgba(249,115,22,0.12);
+    border: 1px solid rgba(249,115,22,0.3);
+    color: #fb923c;
+  }
+  .badge-memos {
+    background: rgba(124,58,237,0.12);
+    border: 1px solid rgba(124,58,237,0.3);
+    color: #a78bfa;
+  }
+  .badge-v2 {
+    background: rgba(79,142,247,0.1);
+    border: 1px solid rgba(79,142,247,0.25);
+    color: #60a5fa;
+  }
+  .header h1 {
+    font-size: 34px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+    line-height: 1.2;
+  }
+  .header-sub { color: var(--text2); font-size: 15px; max-width: 680px; line-height: 1.7; }
+  .header-meta {
+    display: flex;
+    gap: 28px;
+    margin-top: 22px;
+    flex-wrap: wrap;
+  }
+  .header-meta span { color: var(--text3); font-size: 12px; }
+  .header-meta strong { color: var(--text2); }
+
+  /* ── Container ── */
+  .container { max-width: 1440px; margin: 0 auto; padding: 44px 64px; }
+
+  /* ── Section titles ── */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 22px;
+    margin-top: 52px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title:first-child { margin-top: 0; }
+  .snum {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800;
+    flex-shrink: 0;
+    color: white;
+  }
+
+  /* ── Comparison Cards ── */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .compare-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .compare-card-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .compare-card h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .compare-card p {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.75;
+    margin-bottom: 14px;
+  }
+  .feat-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .feat-list li {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .feat-list li span:first-child { flex-shrink: 0; }
+  .limit-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .limit-item {
+    display: flex;
+    gap: 6px;
+    font-size: 11px;
+    color: #f87171;
+    background: rgba(239,68,68,0.07);
+    border-radius: 6px;
+    padding: 5px 8px;
+  }
+
+  /* ── Design Principles ── */
+  .principle-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .principle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+  }
+  .principle-icon { font-size: 26px; margin-bottom: 10px; }
+  .principle-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .principle-desc { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+  /* ── Main Architecture ── */
+  .arch-outer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .arch-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+
+  /* Three-column layout for layers */
+  .arch-layers {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 960px;
+  }
+  .arch-row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+  }
+  .arch-label {
+    width: 90px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 14px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .arch-body { flex: 1; padding: 14px 0; }
+
+  /* Device panel */
+  .device-panel {
+    border-radius: 14px;
+    border: 1.5px solid;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .device-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .dp-phone {
+    border-color: rgba(249,115,22,0.4);
+    background: rgba(249,115,22,0.04);
+  }
+  .dp-phone::before { background: linear-gradient(90deg, #f97316, #fb923c); }
+  .dp-box {
+    border-color: rgba(79,142,247,0.4);
+    background: rgba(79,142,247,0.04);
+  }
+  .dp-box::before { background: linear-gradient(90deg, #4f8ef7, #7c3aed); }
+  .dp-cloud {
+    border-color: rgba(20,184,166,0.4);
+    background: rgba(20,184,166,0.04);
+  }
+  .dp-cloud::before { background: linear-gradient(90deg, #14b8a6, #0ea5e9); }
+
+  .dp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .dp-title {
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dp-phone .dp-title { color: #fb923c; }
+  .dp-box .dp-title { color: #60a5fa; }
+  .dp-cloud .dp-title { color: #2dd4bf; }
+
+  .dp-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-weight: 700;
+  }
+  .dpb-lobster { background: rgba(249,115,22,0.12); color: #fb923c; border: 1px solid rgba(249,115,22,0.25); }
+  .dpb-memos { background: rgba(124,58,237,0.12); color: #a78bfa; border: 1px solid rgba(124,58,237,0.25); }
+  .dpb-both { background: rgba(79,142,247,0.12); color: #60a5fa; border: 1px solid rgba(79,142,247,0.25); }
+
+  /* Module rows inside device panels */
+  .mod-grid {
+    display: grid;
+    gap: 7px;
+  }
+  .mod-grid-2 { grid-template-columns: 1fr 1fr; }
+  .mod-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .mod {
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+  }
+  .mod-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .mod-text {}
+  .mod-name { font-size: 12px; font-weight: 700; color: var(--text); }
+  .mod-desc { font-size: 11px; color: var(--text3); margin-top: 2px; line-height: 1.5; }
+  .mod-tag {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .mt-openclaw { background: rgba(249,115,22,0.15); color: #fb923c; }
+  .mt-memos { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .mt-custom { background: rgba(34,197,94,0.12); color: #4ade80; }
+
+  /* Pipeline strip */
+  .pipeline-strip {
+    background: rgba(79,142,247,0.05);
+    border: 1px solid rgba(79,142,247,0.15);
+    border-radius: 9px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pipeline-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #60a5fa;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .ps { font-size: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; color: var(--text2); white-space: nowrap; }
+  .pa { font-size: 14px; color: var(--text3); }
+
+  /* Sync bridge */
+  .sync-bridge {
+    display: flex;
+    align-items: center;
+    padding: 10px 0 10px 90px;
+    gap: 12px;
+  }
+  .sync-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .sync-center {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 14px;
+    flex-shrink: 0;
+  }
+  .sync-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 8px;
+    font-weight: 700;
+  }
+  .sb-sync { background: rgba(34,197,94,0.1); color: #4ade80; }
+  .sb-enc { background: rgba(239,68,68,0.1); color: #f87171; }
+  .sb-proto { color: var(--text3); font-size: 11px; }
+
+  /* ── Memory Layer Breakdown ── */
+  .layer-breakdown {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .lb-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .lb-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .lb-phone::after { background: linear-gradient(90deg, #f97316, #fb923c); }
+  .lb-box::after { background: linear-gradient(90deg, #4f8ef7, #7c3aed); }
+  .lb-cloud::after { background: linear-gradient(90deg, #14b8a6, #0ea5e9); }
+
+  .lb-device {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .lb-device-icon { font-size: 20px; }
+  .lb-device-name { font-size: 15px; font-weight: 800; }
+  .lb-phone .lb-device-name { color: #fb923c; }
+  .lb-box .lb-device-name { color: #60a5fa; }
+  .lb-cloud .lb-device-name { color: #2dd4bf; }
+
+  .layer-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(39,45,66,0.6);
+  }
+  .layer-item:last-child { border-bottom: none; }
+  .li-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .li-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .li-source {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .ls-oc { background: rgba(249,115,22,0.12); color: #fb923c; }
+  .ls-mm { background: rgba(124,58,237,0.12); color: #a78bfa; }
+  .ls-custom { background: rgba(34,197,94,0.1); color: #4ade80; }
+  .li-desc { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+  /* ── Memory File Structure ── */
+  .file-tree {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12.5px;
+    line-height: 2;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .ft-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    font-family: var(--sans, sans-serif);
+  }
+  .ft-dir { color: #60a5fa; font-weight: 700; }
+  .ft-file { color: var(--text2); }
+  .ft-comment { color: var(--text3); font-style: italic; }
+  .ft-oc { color: #fb923c; }
+  .ft-mm { color: #a78bfa; }
+
+  /* ── Retrieval Flow ── */
+  .flow-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .flow-label { font-size: 11px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 18px; }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 820px;
+  }
+  .fstep {
+    flex: 1;
+    text-align: center;
+  }
+  .fstep-box {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    padding: 12px 8px;
+    margin: 0 4px;
+  }
+  .fstep-box strong { display: block; font-size: 12px; margin-bottom: 4px; color: var(--text); }
+  .fstep-box .sub { font-size: 10px; color: var(--text3); line-height: 1.4; }
+  .farrow { font-size: 18px; color: var(--text3); flex-shrink: 0; padding: 0 2px; }
+
+  /* ── Sync Strategy ── */
+  .sync-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .sc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .sc h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sc-rule {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(39,45,66,0.5);
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .sc-rule:last-child { border-bottom: none; }
+  .sr-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+
+  /* ── Privacy Design ── */
+  .privacy-banner {
+    background: rgba(239,68,68,0.05);
+    border: 1px solid rgba(239,68,68,0.18);
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .pb-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+  .pb-title { font-size: 15px; font-weight: 800; color: #f87171; margin-bottom: 10px; }
+  .pb-rules { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pb-rule {
+    background: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.15);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #fca5a5;
+  }
+
+  /* ── Roadmap ── */
+  .roadmap {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 24px;
+  }
+  .roadmap::before {
+    content: '';
+    position: absolute;
+    left: 5px; top: 14px; bottom: 14px;
+    width: 2px;
+    background: linear-gradient(180deg, #f97316, #7c3aed, #14b8a6);
+    border-radius: 2px;
+  }
+  .rm {
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+    position: relative;
+  }
+  .rm-dot {
+    position: absolute;
+    left: -21px; top: 18px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    flex-shrink: 0;
+  }
+  .rm-date {
+    width: 96px;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    padding-top: 2px;
+    color: var(--text3);
+  }
+  .rm-content h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .rm-content p { font-size: 12px; color: var(--text2); line-height: 1.65; }
+  .rm-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .rm-tag { font-size: 11px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; color: var(--text2); }
+
+  /* ── Decision Matrix ── */
+  .dm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .dm-table th {
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.5px;
+  }
+  .dm-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(39,45,66,0.4);
+    vertical-align: middle;
+    color: var(--text);
+  }
+  .dm-table tr:last-child td { border-bottom: none; }
+  .dm-table tr:hover td { background: rgba(255,255,255,0.015); }
+
+  .rec { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+  .rec-y { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+  .rec-m { background: rgba(245,158,11,0.1); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+  .rec-n { background: rgba(239,68,68,0.08); color: #f87171; border: 1px solid rgba(239,68,68,0.15); }
+
+  /* footnote */
+  .footnote { text-align: center; padding: 32px 0 16px; color: var(--text3); font-size: 12px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 1000px) {
+    .container, .header { padding: 20px; }
+    .compare-grid, .layer-breakdown, .sync-grid { grid-template-columns: 1fr; }
+    .principle-row { grid-template-columns: repeat(2, 1fr); }
+    .arch-layers { min-width: 700px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="badge-row">
+    <span class="badge badge-lobster">🦞 OpenClaw 原生记忆</span>
+    <span class="badge badge-memos">🧬 MemOS 记忆OS</span>
+    <span class="badge badge-v2">v2.0 重新设计</span>
+  </div>
+  <h1>PAS 记忆系统设计 v2</h1>
+  <p class="header-sub">以 OpenClaw 原生记忆为基础，叠加 MemOS 记忆操作系统能力，构建云 · 盒子 · 手机端三层协同的 AI 个人记忆引擎</p>
+  <div class="header-meta">
+    <span>版本 <strong>v2.0</strong></span>
+    <span>日期 <strong>2026-03-30</strong></span>
+    <span>项目 <strong>PAIS-001</strong></span>
+    <span>引擎 <strong>OpenClaw + MemOS 2.0 (星尘)</strong></span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ── SECTION 1: 两套系统的能力拆解 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#f97316;">1</div>
+    先搞清楚：OpenClaw 原生记忆 vs MemOS 各有什么能力？
+  </div>
+
+  <div class="compare-grid">
+    <!-- OpenClaw -->
+    <div class="compare-card">
+      <div class="compare-card-top" style="background:linear-gradient(90deg,#f97316,#fb923c);"></div>
+      <h3>🦞 OpenClaw 原生记忆</h3>
+      <p>龙虾框架原生内置，以 <strong>Markdown 文件</strong>为存储基础，带双层架构 + SQLite向量索引的混合检索系统。<em>开箱即用，对盒子非常友好。</em></p>
+      <ul class="feat-list">
+        <li><span>✅</span><span><strong>双层架构</strong>：每日日志 YYYY-MM-DD.md + 长期记忆 MEMORY.md</span></li>
+        <li><span>✅</span><span><strong>混合检索</strong>：BM25 关键词 + 向量语义，权重可调</span></li>
+        <li><span>✅</span><span><strong>本地向量</strong>：SQLite + sqlite-vec，单文件零依赖</span></li>
+        <li><span>✅</span><span><strong>自动刷新</strong>：上下文压缩前自动写入记忆</span></li>
+        <li><span>✅</span><span><strong>本地 Embedding</strong>：支持 GGUF 模型，不依赖云 API</span></li>
+        <li><span>✅</span><span><strong>可读可编辑</strong>：Markdown 文件人类可直接审阅/修改</span></li>
+      </ul>
+      <div class="limit-list">
+        <div class="limit-item"><span>⚠️</span><span>无原生多端同步机制</span></div>
+        <div class="limit-item"><span>⚠️</span><span>无记忆重要性评分 / 自动遗忘</span></div>
+        <div class="limit-item"><span>⚠️</span><span>无实体抽取 / 知识图谱能力</span></div>
+      </div>
+    </div>
+
+    <!-- MemOS -->
+    <div class="compare-card">
+      <div class="compare-card-top" style="background:linear-gradient(90deg,#7c3aed,#ec4899);"></div>
+      <h3>🧬 MemOS 2.0（星尘）</h3>
+      <p>将记忆视为 <strong>第一类系统资源</strong>，提供类操作系统的调度层。原生支持 OpenClaw 插件集成，两种部署模式（云端/本地）。</p>
+      <ul class="feat-list">
+        <li><span>✅</span><span><strong>统一记忆 API</strong>：add / search / edit / delete 四类操作</span></li>
+        <li><span>✅</span><span><strong>结构化记忆图谱</strong>：可检查、可编辑，非黑盒存储</span></li>
+        <li><span>✅</span><span><strong>MemCube 隔离</strong>：多用户/多项目记忆隔离 + 受控共享</span></li>
+        <li><span>✅</span><span><strong>异步调度</strong>：Redis Streams 驱动，毫秒级延迟</span></li>
+        <li><span>✅</span><span><strong>多模态记忆</strong>：文本、图片、工具痕迹原生支持</span></li>
+        <li><span>✅</span><span><strong>自然语言纠错</strong>：支持用自然语言反馈修正记忆</span></li>
+        <li><span>✅</span><span><strong>MCP 协议</strong>：Model Context Protocol 原生支持</span></li>
+      </ul>
+      <div class="limit-list">
+        <div class="limit-item"><span>⚠️</span><span>完整部署依赖 Redis，盒子资源需规划</span></div>
+        <div class="limit-item"><span>⚠️</span><span>相比原生 OpenClaw 记忆，配置复杂度更高</span></div>
+      </div>
+    </div>
+
+    <!-- 协同优势 -->
+    <div class="compare-card" style="border-color:rgba(79,142,247,0.35);background:rgba(79,142,247,0.03);">
+      <div class="compare-card-top" style="background:linear-gradient(90deg,#4f8ef7,#7c3aed,#14b8a6);"></div>
+      <h3 style="color:#60a5fa;">⚡ 两者协同 = PAS 最优解</h3>
+      <p>OpenClaw 原生记忆提供<strong>轻量、透明、可读</strong>的本地存储基础；MemOS 提供<strong>智能调度、图谱构建、多端同步</strong>的高级能力。叠加后形成互补。</p>
+      <ul class="feat-list">
+        <li><span>🔵</span><span><strong>OpenClaw 负责</strong>：实时会话上下文管理、文件写入、本地检索</span></li>
+        <li><span>🟣</span><span><strong>MemOS 负责</strong>：记忆结构化、重要性调度、跨端同步、图谱演化</span></li>
+        <li><span>🟢</span><span><strong>PAS 自研</strong>：云端加密同步层、隐私策略执行、手机端轻缓存</span></li>
+      </ul>
+      <div style="margin-top:14px;background:rgba(79,142,247,0.08);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:6px;">📊 关键性能数据（MemOS vs 基线）</div>
+        <div style="font-size:12px;color:var(--text2);">准确率 <strong style="color:#4ade80">+43.70%</strong> vs OpenAI Memory&nbsp;&nbsp;·&nbsp;&nbsp;记忆 Token 节省 <strong style="color:#4ade80">35.24%</strong>&nbsp;&nbsp;·&nbsp;&nbsp;LoCoMo基准 <strong style="color:#60a5fa">75.80</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: 设计原则 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#4f8ef7;">2</div>
+    设计原则：四条不可违背的约束
+  </div>
+  <div class="principle-row">
+    <div class="principle">
+      <div class="principle-icon">🔒</div>
+      <div class="principle-name">原文永不出盒</div>
+      <div class="principle-desc">记忆原文只存盒子侧。云端 & 手机端只存加密摘要或临时缓存，用户持有唯一密钥。</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">📦</div>
+      <div class="principle-name">盒子是 Source of Truth</div>
+      <div class="principle-desc">所有设备以盒子记忆版本为权威。手机、Web 端的记忆均视为「待同步」副本。</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">⚡</div>
+      <div class="principle-name">检索不阻塞推理</div>
+      <div class="principle-desc">记忆写入异步执行，读取走 Redis 热缓存，保证对话响应延迟不受记忆操作影响。</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">🧩</div>
+      <div class="principle-name">框架层分离</div>
+      <div class="principle-desc">OpenClaw 原生记忆处理实时上下文；MemOS 处理结构化治理。职责分离，互不干扰。</div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: 核心架构图 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#7c3aed;">3</div>
+    核心架构：三层协同记忆系统全景图
+  </div>
+
+  <div class="arch-outer">
+    <div class="arch-title">PAS Memory System Architecture · OpenClaw + MemOS + PAS Cloud Layer</div>
+    <div class="arch-layers">
+
+      <!-- ─ 手机端 ─ -->
+      <div class="arch-row">
+        <div class="arch-label" style="color:#fb923c;">手机端</div>
+        <div class="arch-body">
+          <div style="display:flex;gap:14px;">
+
+            <div class="device-panel dp-phone" style="flex:1;">
+              <div class="dp-header">
+                <div class="dp-title">📱 Mobile App (iOS / Android)</div>
+                <span class="dp-badge dpb-lobster">OpenClaw Client</span>
+              </div>
+              <div class="mod-grid mod-grid-2">
+                <div class="mod">
+                  <div class="mod-icon">💬</div>
+                  <div class="mod-text">
+                    <div class="mod-name">会话缓存层</div>
+                    <div class="mod-desc">SQLite 本地存储，近50条对话，离线可用</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw 原生</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📄</div>
+                  <div class="mod-text">
+                    <div class="mod-name">MEMORY.md 快照</div>
+                    <div class="mod-desc">从盒子同步的记忆摘要，注入 System Prompt</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw 原生</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">⚡</div>
+                  <div class="mod-text">
+                    <div class="mod-name">MemCube 本地副本</div>
+                    <div class="mod-desc">MemOS 热门记忆 Cube 本地缓存，快速检索</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🔑</div>
+                  <div class="mod-text">
+                    <div class="mod-name">偏好 & 密钥</div>
+                    <div class="mod-desc">KeyChain / SecureStorage，用户持有加密密钥</div>
+                    <span class="mod-tag mt-custom">PAS 自研</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="device-panel dp-phone" style="flex:0.75;">
+              <div class="dp-header">
+                <div class="dp-title">💻 Web UI</div>
+                <span class="dp-badge dpb-lobster">Browser Client</span>
+              </div>
+              <div class="mod-grid" style="gap:7px;">
+                <div class="mod">
+                  <div class="mod-icon">🗂️</div>
+                  <div class="mod-text">
+                    <div class="mod-name">IndexedDB</div>
+                    <div class="mod-desc">草稿 & 会话缓存</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🔍</div>
+                  <div class="mod-text">
+                    <div class="mod-name">记忆可视化 UI</div>
+                    <div class="mod-desc">MemOS 记忆图谱浏览 & 编辑</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Bridge 1 -->
+      <div class="sync-bridge">
+        <div class="sync-line"></div>
+        <div class="sync-center">
+          <span class="sync-badge sb-sync">实时双向</span>
+          <span class="sb-proto">WebSocket · OpenClaw MCP · MemOS API</span>
+          <span class="sync-badge sb-enc">端到端加密</span>
+        </div>
+        <div class="sync-line"></div>
+      </div>
+
+      <!-- ─ 盒子侧 ─ -->
+      <div class="arch-row">
+        <div class="arch-label" style="color:#60a5fa;">盒子侧</div>
+        <div class="arch-body">
+          <div class="device-panel dp-box">
+            <div class="dp-header">
+              <div class="dp-title">📦 PAIS Box — RK3588 · Source of Truth</div>
+              <div style="display:flex;gap:6px;">
+                <span class="dp-badge dpb-lobster">OpenClaw Server</span>
+                <span class="dp-badge dpb-memos">MemOS Local</span>
+              </div>
+            </div>
+            <div class="mod-grid mod-grid-3">
+
+              <!-- OpenClaw原生层 -->
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                <div style="font-size:10px;font-weight:800;color:#fb923c;letter-spacing:1px;text-transform:uppercase;padding:2px 0 6px;border-bottom:1px solid rgba(249,115,22,0.2);">🦞 OpenClaw 原生记忆层</div>
+                <div class="mod">
+                  <div class="mod-icon">📝</div>
+                  <div class="mod-text">
+                    <div class="mod-name">每日日志</div>
+                    <div class="mod-desc">memory/YYYY-MM-DD.md 追加写入</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📄</div>
+                  <div class="mod-text">
+                    <div class="mod-name">长期记忆</div>
+                    <div class="mod-desc">MEMORY.md 精炼持久知识</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🔍</div>
+                  <div class="mod-text">
+                    <div class="mod-name">混合检索</div>
+                    <div class="mod-desc">SQLite-vec + BM25 FTS5 本地索引</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🧮</div>
+                  <div class="mod-text">
+                    <div class="mod-name">本地 Embedding</div>
+                    <div class="mod-desc">GGUF 模型（bge-small-zh→bge-m3）NPU加速</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- MemOS层 -->
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px;text-transform:uppercase;padding:2px 0 6px;border-bottom:1px solid rgba(124,58,237,0.2);">🧬 MemOS 记忆操作系统层</div>
+                <div class="mod">
+                  <div class="mod-icon">🧠</div>
+                  <div class="mod-text">
+                    <div class="mod-name">MemOS Scheduler</div>
+                    <div class="mod-desc">Redis Streams 异步调度，记忆写入毫秒级</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📦</div>
+                  <div class="mod-text">
+                    <div class="mod-name">MemCube 管理</div>
+                    <div class="mod-desc">多用户/多项目记忆隔离 & 共享控制</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🕸️</div>
+                  <div class="mod-text">
+                    <div class="mod-name">记忆图谱</div>
+                    <div class="mod-desc">结构化实体关系，可检查可编辑</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📊</div>
+                  <div class="mod-text">
+                    <div class="mod-name">重要性调度</div>
+                    <div class="mod-desc">Hot/Warm/Cold 分层，遗忘曲线降权</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 存储层 -->
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                <div style="font-size:10px;font-weight:800;color:#4ade80;letter-spacing:1px;text-transform:uppercase;padding:2px 0 6px;border-bottom:1px solid rgba(34,197,94,0.2);">🗄️ 存储基础设施层</div>
+                <div class="mod">
+                  <div class="mod-icon">🔑</div>
+                  <div class="mod-text">
+                    <div class="mod-name">Redis</div>
+                    <div class="mod-desc">MemOS 任务队列 + OpenClaw 会话热缓存</div>
+                    <span class="mod-tag mt-custom">共用</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">🗃️</div>
+                  <div class="mod-text">
+                    <div class="mod-name">PostgreSQL</div>
+                    <div class="mod-desc">对话历史、实体表、MemOS 结构化存储</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📦</div>
+                  <div class="mod-text">
+                    <div class="mod-name">MinIO</div>
+                    <div class="mod-desc">多模态记忆：图片/音频/文档，S3接口</div>
+                    <span class="mod-tag mt-memos">MemOS</span>
+                  </div>
+                </div>
+                <div class="mod">
+                  <div class="mod-icon">📁</div>
+                  <div class="mod-text">
+                    <div class="mod-name">Markdown 文件系统</div>
+                    <div class="mod-desc">OpenClaw 原始记忆文件，人类可读</div>
+                    <span class="mod-tag mt-openclaw">OpenClaw</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Pipeline -->
+            <div class="pipeline-strip">
+              <span class="pipeline-label">⚙️ 记忆写入管线</span>
+              <span class="ps">对话输入</span><span class="pa">→</span>
+              <span class="ps">OpenClaw 自动写日志</span><span class="pa">→</span>
+              <span class="ps">MemOS 重要性评分</span><span class="pa">→</span>
+              <span class="ps">实体抽取 / 图谱更新</span><span class="pa">→</span>
+              <span class="ps">Embedding (本地 NPU)</span><span class="pa">→</span>
+              <span class="ps">SQLite-vec + PG 写入</span><span class="pa">→</span>
+              <span class="ps">异步加密摘要 → 云端</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Bridge 2 -->
+      <div class="sync-bridge">
+        <div class="sync-line"></div>
+        <div class="sync-center">
+          <span class="sync-badge sb-enc">AES-256 全程加密</span>
+          <span class="sb-proto">HTTPS · 异步批量 · 仅摘要（原文不出盒）</span>
+          <span class="sync-badge sb-sync">夜间批同步</span>
+        </div>
+        <div class="sync-line"></div>
+      </div>
+
+      <!-- ─ 云端 ─ -->
+      <div class="arch-row">
+        <div class="arch-label" style="color:#2dd4bf;">云端</div>
+        <div class="arch-body">
+          <div class="device-panel dp-cloud">
+            <div class="dp-header">
+              <div class="dp-title">☁️ PAS Cloud Layer（自托管 / 腾讯云）</div>
+              <span class="dp-badge" style="background:rgba(20,184,166,0.12);color:#2dd4bf;border:1px solid rgba(20,184,166,0.25);">PAS 自研同步层</span>
+            </div>
+            <div class="mod-grid mod-grid-3">
+              <div class="mod">
+                <div class="mod-icon">🌐</div>
+                <div class="mod-text">
+                  <div class="mod-name">MemOS Cloud Sync</div>
+                  <div class="mod-desc">MemCube 加密摘要云同步，多盒子互备</div>
+                  <span class="mod-tag mt-memos">MemOS</span>
+                </div>
+              </div>
+              <div class="mod">
+                <div class="mod-icon">🔐</div>
+                <div class="mod-text">
+                  <div class="mod-name">KMS 密钥管理</div>
+                  <div class="mod-desc">用户持有密钥，厂商零知识，TEE 保护</div>
+                  <span class="mod-tag mt-custom">PAS 自研</span>
+                </div>
+              </div>
+              <div class="mod">
+                <div class="mod-icon">👤</div>
+                <div class="mod-text">
+                  <div class="mod-name">账号 & 设备绑定</div>
+                  <div class="mod-desc">多盒子 / 多手机关联，设备授权管理</div>
+                  <span class="mod-tag mt-custom">PAS 自研</span>
+                </div>
+              </div>
+              <div class="mod">
+                <div class="mod-icon">📦</div>
+                <div class="mod-text">
+                  <div class="mod-name">MEMORY.md 备份</div>
+                  <div class="mod-desc">盒子异常时用于恢复，加密存储</div>
+                  <span class="mod-tag mt-openclaw">OpenClaw</span>
+                </div>
+              </div>
+              <div class="mod">
+                <div class="mod-icon">🌍</div>
+                <div class="mod-text">
+                  <div class="mod-name">公共知识库 RAG</div>
+                  <div class="mod-desc">维基、专业领域文档（非个人记忆）</div>
+                  <span class="mod-tag mt-custom">PAS 自研</span>
+                </div>
+              </div>
+              <div class="mod">
+                <div class="mod-icon">📊</div>
+                <div class="mod-text">
+                  <div class="mod-name">匿名统计 & 诊断</div>
+                  <div class="mod-desc">仅用户授权下的匿名使用数据</div>
+                  <span class="mod-tag mt-custom">PAS 自研</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: 各端职责详解 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#14b8a6;">4</div>
+    各端职责详解：每层存什么、用什么、为什么
+  </div>
+
+  <div class="layer-breakdown">
+
+    <div class="lb-card lb-phone">
+      <div class="lb-device">
+        <div class="lb-device-icon">📱</div>
+        <div class="lb-device-name">手机端</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text3);">轻量 · 离线可用</div>
+      </div>
+
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">💬 会话缓存</div>
+          <span class="li-source ls-oc">OpenClaw</span>
+        </div>
+        <div class="li-desc">SQLite 存最近 50 条对话。盒子不可达时支持离线推理。重连后增量同步。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">📄 MEMORY.md 快照</div>
+          <span class="li-source ls-oc">OpenClaw</span>
+        </div>
+        <div class="li-desc">从盒子定期拉取的记忆摘要 Markdown，直接注入对话 System Prompt，实现「记住你」的感知。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">⚡ MemCube 热缓存</div>
+          <span class="li-source ls-mm">MemOS</span>
+        </div>
+        <div class="li-desc">MemOS 判定为 Hot 的高频访问记忆 Cube，主动推送至手机端本地，检索不走网络。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🔑 加密密钥</div>
+          <span class="li-source ls-custom">PAS 自研</span>
+        </div>
+        <div class="li-desc">存入系统级安全存储（iOS KeyChain / Android Keystore）。密钥用于解密云端同步的记忆摘要。</div>
+      </div>
+    </div>
+
+    <div class="lb-card lb-box">
+      <div class="lb-device">
+        <div class="lb-device-icon">📦</div>
+        <div class="lb-device-name">盒子侧</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text3);">全量 · 权威 · 本地</div>
+      </div>
+
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">📝 每日日志 / 长期记忆</div>
+          <span class="li-source ls-oc">OpenClaw</span>
+        </div>
+        <div class="li-desc">OpenClaw 原生的 Markdown 文件双层结构。人类可读、可版本管理，是记忆的「原文」所在地。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🔍 混合向量检索</div>
+          <span class="li-source ls-oc">OpenClaw</span>
+        </div>
+        <div class="li-desc">SQLite-vec 向量 + FTS5 BM25 混合检索，本地 Embedding（bge-m3 / GGUF），NPU 加速，零云依赖。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🧬 MemOS 记忆图谱</div>
+          <span class="li-source ls-mm">MemOS</span>
+        </div>
+        <div class="li-desc">MemOS 在 OpenClaw 原始记忆之上构建结构化图谱，抽取实体关系，支持图谱级检索和演化。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">📊 重要性分层</div>
+          <span class="li-source ls-mm">MemOS</span>
+        </div>
+        <div class="li-desc">MemOS Scheduler 按 Hot/Warm/Cold 分层调度，高频记忆常驻 Redis，冷记忆压缩归档。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🖼️ 多模态记忆</div>
+          <span class="li-source ls-mm">MemOS</span>
+        </div>
+        <div class="li-desc">MemOS 原生支持图片、工具调用痕迹的记忆存储（MinIO），配合 CLIP 向量化实现图片语义检索。</div>
+      </div>
+    </div>
+
+    <div class="lb-card lb-cloud">
+      <div class="lb-device">
+        <div class="lb-device-icon">☁️</div>
+        <div class="lb-device-name">云端</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text3);">备份 · 同步 · 零知识</div>
+      </div>
+
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🔐 加密摘要备份</div>
+          <span class="li-source ls-mm">MemOS</span>
+        </div>
+        <div class="li-desc">MemOS Cloud Sync 将盒子记忆摘要（非原文）AES-256 加密后上传。用于盒子损坏时的恢复，以及多盒子场景的记忆迁移。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">📄 MEMORY.md 加密备份</div>
+          <span class="li-source ls-oc">OpenClaw</span>
+        </div>
+        <div class="li-desc">OpenClaw 精炼后的长期记忆文件，加密上传云端作为灾难恢复底线。手机端可凭密钥解密拉取。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">👤 账号 & 设备管理</div>
+          <span class="li-source ls-custom">PAS 自研</span>
+        </div>
+        <div class="li-desc">记录用户账号、绑定设备列表、MemCube 分配关系，不含任何记忆内容。</div>
+      </div>
+      <div class="layer-item">
+        <div class="li-row">
+          <div class="li-name">🌍 公共知识 RAG</div>
+          <span class="li-source ls-custom">PAS 自研</span>
+        </div>
+        <div class="li-desc">面向所有用户的公共知识库，不包含个人信息。与个人记忆完全分离。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 5: 记忆文件结构 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#f59e0b;">5</div>
+    盒子侧文件结构设计（OpenClaw 工作空间）
+  </div>
+
+  <div class="file-tree">
+    <div class="ft-header">📁 PAIS Box — OpenClaw Workspace 目录结构</div>
+~/.openclaw/workspace/
+├── <span class="ft-oc">MEMORY.md</span>                        <span class="ft-comment"># OpenClaw 长期记忆（精炼后的持久知识）</span>
+├── <span class="ft-dir">memory/</span>
+│   ├── <span class="ft-oc">2026-03-29.md</span>                  <span class="ft-comment"># 每日日志 — 今天和昨天自动加载</span>
+│   ├── <span class="ft-oc">2026-03-30.md</span>                  <span class="ft-comment"># 每日日志 — 当天（追加写入）</span>
+│   └── <span class="ft-oc">tacit_knowledge.md</span>            <span class="ft-comment"># 用户画像：习惯、偏好、隐性知识</span>
+│
+├── <span class="ft-dir">life/</span>                               <span class="ft-comment"># MemOS 知识图谱层（PARA 方法组织）</span>
+│   ├── <span class="ft-dir">projects/</span>
+│   │   └── <span class="ft-mm">PAS/summary.md</span>              <span class="ft-comment"># 项目摘要（OpenClaw 检索）</span>
+│   │   └── <span class="ft-mm">PAS/items.json</span>              <span class="ft-comment"># 项目结构化事实（MemOS 管理）</span>
+│   ├── <span class="ft-dir">people/</span>
+│   │   └── <span class="ft-mm">contacts.json</span>              <span class="ft-comment"># 人物关系图谱（MemOS 图谱层）</span>
+│   ├── <span class="ft-dir">areas/</span>                          <span class="ft-comment"># 关注领域 & 技能</span>
+│   └── <span class="ft-dir">archive/</span>                        <span class="ft-comment"># Cold 记忆归档（MemOS 冷存储）</span>
+│
+├── <span class="ft-dir">multimodal/</span>                         <span class="ft-comment"># MemOS 多模态记忆（→ MinIO 软链接）</span>
+│   ├── images/
+│   └── tool_traces/
+│
+└── <span class="ft-dir">sessions/</span>                           <span class="ft-comment"># OpenClaw 对话记录（JSONL）</span>
+    └── sessions.jsonl                  <span class="ft-comment"># 原始 → sessions-clean.jsonl 清洗后向量化</span>
+
+~/.openclaw/memory/
+└── <span class="ft-oc">&lt;agentId&gt;.sqlite</span>               <span class="ft-comment"># OpenClaw 向量索引（sqlite-vec）</span>
+  </div>
+
+  <!-- ── SECTION 6: 检索流程 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#22c55e;">6</div>
+    记忆检索全链路（读取路径）
+  </div>
+
+  <div class="flow-wrap">
+    <div class="flow-label">Memory Read Pipeline — 一次对话请求的记忆召回</div>
+    <div class="flow-row">
+      <div class="fstep"><div class="fstep-box"><strong>① 用户输入</strong><div class="sub">手机 / Web</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(249,115,22,0.3);"><strong>② OpenClaw 预注入</strong><div class="sub">自动加载昨天<br>& 今天日志</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(245,158,11,0.3);"><strong>③ Redis 热缓存</strong><div class="sub">MemOS Hot<br>记忆命中</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(79,142,247,0.3);"><strong>④ 混合检索</strong><div class="sub">SQLite-vec<br>+ BM25</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(124,58,237,0.3);"><strong>⑤ MemOS 图谱</strong><div class="sub">实体关联<br>扩展召回</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(20,184,166,0.3);"><strong>⑥ Rerank 融合</strong><div class="sub">多路结果<br>重排序</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(34,197,94,0.3);"><strong>⑦ 注入 LLM</strong><div class="sub">System Prompt<br>增强推理</div></div></div>
+    </div>
+  </div>
+
+  <div class="flow-wrap">
+    <div class="flow-label">Memory Write Pipeline — 对话结束后异步执行</div>
+    <div class="flow-row">
+      <div class="fstep"><div class="fstep-box"><strong>① 对话结束</strong><div class="sub">触发异步</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(249,115,22,0.3);"><strong>② OpenClaw 写日志</strong><div class="sub">自动追加<br>YYYY-MM-DD.md</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(124,58,237,0.3);"><strong>③ MemOS 重要性评分</strong><div class="sub">判断是否值得<br>长期存储</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(124,58,237,0.3);"><strong>④ 实体抽取</strong><div class="sub">更新 MemOS<br>记忆图谱</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(79,142,247,0.3);"><strong>⑤ 本地 Embedding</strong><div class="sub">GGUF 模型<br>NPU 加速</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(34,197,94,0.3);"><strong>⑥ 落盘</strong><div class="sub">SQLite-vec<br>+ PG 写入</div></div></div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fstep-box" style="border-color:rgba(20,184,166,0.3);"><strong>⑦ 定期同步云端</strong><div class="sub">加密摘要<br>原文不出盒</div></div></div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 7: 同步策略 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#ec4899;">7</div>
+    三端同步策略
+  </div>
+
+  <div class="sync-grid">
+    <div class="sc">
+      <h3>📱 手机 ↔ 盒子</h3>
+      <div class="sc-rule"><span class="sr-icon">⚡</span><div><strong>实时（&lt;100ms）：</strong>WebSocket 长连接，当前会话 Working Memory 实时双向同步</div></div>
+      <div class="sc-rule"><span class="sr-icon">📤</span><div><strong>批量推送（5分钟）：</strong>手机新产生的记忆（日志片段）增量推送盒子，由 MemOS 消化处理</div></div>
+      <div class="sc-rule"><span class="sr-icon">📥</span><div><strong>拉取 MEMORY.md（每天）：</strong>手机定期从盒子拉取精炼后的长期记忆快照</div></div>
+      <div class="sc-rule"><span class="sr-icon">📴</span><div><strong>离线降级：</strong>盒子不可达时，手机使用本地 SQLite 缓存 + MEMORY.md 快照继续工作，重连后自动增量合并</div></div>
+    </div>
+    <div class="sc">
+      <h3>📦 盒子 ↔ 云端</h3>
+      <div class="sc-rule"><span class="sr-icon">🌙</span><div><strong>夜间批同步（02:00）：</strong>MemOS 将记忆摘要加密后上传云端，做多盒子备份</div></div>
+      <div class="sc-rule"><span class="sr-icon">📄</span><div><strong>MEMORY.md 备份（每天）：</strong>OpenClaw 精炼后的长期记忆文件加密上传</div></div>
+      <div class="sc-rule"><span class="sr-icon">🔐</span><div><strong>零知识加密：</strong>用户密钥不上传，云端存储内容厂商无法解密</div></div>
+      <div class="sc-rule"><span class="sr-icon">🔄</span><div><strong>灾难恢复：</strong>盒子换新时，凭账号 + 密钥从云端下载加密备份，本地解密还原全部记忆</div></div>
+    </div>
+    <div class="sc">
+      <h3>⚠️ 冲突解决</h3>
+      <div class="sc-rule"><span class="sr-icon">🏆</span><div><strong>盒子优先（Source of Truth）：</strong>所有端以盒子版本为最终权威</div></div>
+      <div class="sc-rule"><span class="sr-icon">🕐</span><div><strong>逻辑时钟：</strong>每条记忆携带 Vector Clock，取最新版本，旧版本保留快照</div></div>
+      <div class="sc-rule"><span class="sr-icon">🧬</span><div><strong>MemOS 语义冲突检测：</strong>相同实体矛盾记忆取最新，标记「已更新」，保留历史</div></div>
+      <div class="sc-rule"><span class="sr-icon">👁️</span><div><strong>用户自然语言纠错：</strong>MemOS 支持「不对，我不喜欢咖啡」直接修正记忆</div></div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 8: 隐私设计 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#ef4444;">8</div>
+    隐私设计：数据主权完全在用户手中
+  </div>
+
+  <div class="privacy-banner">
+    <div class="pb-icon">🔐</div>
+    <div>
+      <div class="pb-title">核心隐私原则：Markdown 原文永不离开盒子，云端零知识</div>
+      <div class="pb-rules">
+        <span class="pb-rule">盒子本地存储所有原文（OpenClaw Markdown）</span>
+        <span class="pb-rule">云端只存 AES-256 加密摘要（MemOS Cloud）</span>
+        <span class="pb-rule">用户独享加密密钥，存入 TEE / Secure Enclave</span>
+        <span class="pb-rule">厂商服务器无法解密任何内容（零知识）</span>
+        <span class="pb-rule">支持完全断网私有化部署（盒子 + 手机局域网）</span>
+        <span class="pb-rule">用户可一键 export 全部 Markdown 文件</span>
+        <span class="pb-rule">MemOS 记忆删除 → 级联清除云端备份</span>
+        <span class="pb-rule">记忆访问日志可审计（OpenClaw 会话记录）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 9: 决策矩阵 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#4f8ef7;">9</div>
+    技术决策矩阵：各层用什么、为什么
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;">
+    <div style="overflow-x:auto;">
+    <table class="dm-table">
+      <thead>
+        <tr>
+          <th>需求场景</th>
+          <th>负责方</th>
+          <th>技术方案</th>
+          <th>理由</th>
+          <th>层级</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>实时上下文注入（会话中）</strong></td>
+          <td><span style="color:#fb923c">OpenClaw 原生</span></td>
+          <td>自动加载昨天 + 今天的 Markdown 日志</td>
+          <td>零延迟，无需检索，原生支持</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>语义相似记忆检索</strong></td>
+          <td><span style="color:#fb923c">OpenClaw 原生</span></td>
+          <td>SQLite-vec 向量 + BM25 混合搜索</td>
+          <td>单文件、嵌入式、零依赖，适合 RK3588</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>记忆重要性评分 & 分层</strong></td>
+          <td><span style="color:#a78bfa">MemOS</span></td>
+          <td>MemOS Scheduler + Hot/Warm/Cold 分层</td>
+          <td>OpenClaw 无此能力，MemOS 原生支持</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>实体关系 & 知识图谱</strong></td>
+          <td><span style="color:#a78bfa">MemOS</span></td>
+          <td>MemOS 结构化记忆图（可检查可编辑）</td>
+          <td>OpenClaw 扁平存储，无图谱能力</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>多模态记忆（图片/音频）</strong></td>
+          <td><span style="color:#a78bfa">MemOS</span></td>
+          <td>MemOS 原生多模态 + MinIO 对象存储</td>
+          <td>MemOS 2.0 原生支持，无需额外开发</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>多设备记忆同步</strong></td>
+          <td><span style="color:#4ade80">PAS 自研</span></td>
+          <td>WebSocket（手机↔盒子）+ HTTPS（盒子↔云）</td>
+          <td>OpenClaw / MemOS 均无多端同步层，需 PAS 补充</td>
+          <td>跨层</td>
+        </tr>
+        <tr>
+          <td><strong>加密备份 & 灾难恢复</strong></td>
+          <td><span style="color:#a78bfa">MemOS</span> + <span style="color:#4ade80">PAS</span></td>
+          <td>MemOS Cloud Sync + AES-256 + PAS KMS</td>
+          <td>MemOS 提供同步框架，PAS 负责密钥管理</td>
+          <td>云端</td>
+        </tr>
+        <tr>
+          <td><strong>自然语言记忆纠错</strong></td>
+          <td><span style="color:#a78bfa">MemOS</span></td>
+          <td>MemOS 反馈接口，直接修正图谱</td>
+          <td>MemOS 2.0 核心功能，体验最优</td>
+          <td>盒子侧</td>
+        </tr>
+        <tr>
+          <td><strong>手机端离线可用性</strong></td>
+          <td><span style="color:#fb923c">OpenClaw</span> + <span style="color:#4ade80">PAS</span></td>
+          <td>SQLite 缓存 + MEMORY.md 快照</td>
+          <td>OpenClaw Markdown 文件可直接缓存在手机</td>
+          <td>手机端</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── SECTION 10: 开发路线图 ── -->
+  <div class="section-title">
+    <div class="snum" style="background:#f97316;">10</div>
+    开发路线图：分阶段落地
+  </div>
+
+  <div class="roadmap">
+    <div class="rm" style="">
+      <div class="rm-dot" style="background:#f97316;"></div>
+      <div class="rm-date" style="color:#fb923c;">4月7日<br>Sprint 1</div>
+      <div class="rm-content">
+        <h4>基础底座：让 OpenClaw 记忆在盒子上跑通</h4>
+        <p>在 Docker Compose 中部署 OpenClaw Server，验证 Markdown 双层记忆 + SQLite-vec 混合检索。选定本地 Embedding 模型（从 nomic-embed 或 bge-small 起步），打通基本的「记住你」对话能力。</p>
+        <div class="rm-tags">
+          <span class="rm-tag">OpenClaw Server 部署</span>
+          <span class="rm-tag">SQLite-vec 向量索引</span>
+          <span class="rm-tag">本地 Embedding GGUF</span>
+          <span class="rm-tag">双层记忆文件结构</span>
+          <span class="rm-tag">BM25 混合检索</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rm">
+      <div class="rm-dot" style="background:#7c3aed;"></div>
+      <div class="rm-date" style="color:#a78bfa;">4月21日<br>Sprint 2</div>
+      <div class="rm-content">
+        <h4>叠加 MemOS：记忆从存储升级为智能治理</h4>
+        <p>部署 MemOS Local（含 Redis + PG），接入 OpenClaw Plugin。让 MemOS 在 OpenClaw 记忆之上自动构建结构化图谱、实体抽取、重要性分层。此阶段盒子侧记忆能力大幅提升。</p>
+        <div class="rm-tags">
+          <span class="rm-tag">MemOS Local 部署</span>
+          <span class="rm-tag">OpenClaw ×MemOS Plugin 集成</span>
+          <span class="rm-tag">实体抽取 & 图谱构建</span>
+          <span class="rm-tag">Hot/Warm/Cold 分层</span>
+          <span class="rm-tag">自然语言记忆纠错</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rm">
+      <div class="rm-dot" style="background:#4f8ef7;"></div>
+      <div class="rm-date" style="color:#60a5fa;">5月9日<br>软件 Demo</div>
+      <div class="rm-content">
+        <h4>多端同步：「无论在哪，AI 都记得你」</h4>
+        <p>实现手机端 MEMORY.md 快照同步和 WebSocket 实时会话同步，支持离线降级 + 重连合并。Demo 时展示：手机问一半，换到 Web 端继续，AI 无缝接续。</p>
+        <div class="rm-tags">
+          <span class="rm-tag">WebSocket 实时同步</span>
+          <span class="rm-tag">手机端 SQLite 缓存</span>
+          <span class="rm-tag">MEMORY.md 快照拉取</span>
+          <span class="rm-tag">MemCube 热缓存推送</span>
+          <span class="rm-tag">离线降级 & 重连合并</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rm">
+      <div class="rm-dot" style="background:#14b8a6;"></div>
+      <div class="rm-date" style="color:#2dd4bf;">6月27日<br>硬件 Demo</div>
+      <div class="rm-content">
+        <h4>硬件优化 + 云同步：跑在实体 RK3588 上的完整记忆系统</h4>
+        <p>针对 RK3588 NPU 优化 Embedding（升级至 bge-m3，RKNN 加速），实现 MemOS Cloud Sync 加密备份，配套 KMS 密钥管理。展示多模态记忆（拍照、语音片段记忆）。</p>
+        <div class="rm-tags">
+          <span class="rm-tag">bge-m3 + RKNN NPU 加速</span>
+          <span class="rm-tag">MemOS Cloud Sync 加密</span>
+          <span class="rm-tag">AES-256 + PAS KMS</span>
+          <span class="rm-tag">多模态记忆（图片）</span>
+          <span class="rm-tag">记忆管理 UI（查看/删除/导出）</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rm">
+      <div class="rm-dot" style="background:#22c55e;"></div>
+      <div class="rm-date" style="color:#4ade80;">8月底<br>DVT</div>
+      <div class="rm-content">
+        <h4>家庭共享记忆 + 知识图谱进化（v2.0）</h4>
+        <p>MemCube 共享机制实现家庭成员间选择性记忆共享；MemOS 图谱进化为可导航的个人知识图谱；支持语音记忆和工具调用痕迹记忆。</p>
+        <div class="rm-tags">
+          <span class="rm-tag">MemCube 家庭共享</span>
+          <span class="rm-tag">个人知识图谱可视化</span>
+          <span class="rm-tag">语音记忆支持</span>
+          <span class="rm-tag">工具痕迹记忆</span>
+          <span class="rm-tag">记忆订阅 / 通知</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    PAS Memory System Design v2.0 · 2026-03-30 · 基于 OpenClaw 原生记忆 + MemOS 2.0（星尘）协同架构
+  </div>
+
+</div>
+</body>
+</html>
